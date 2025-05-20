@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*.swn
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+
+*.mp4
+*/test-videos
+
+
+hooked-ai-backend/__pycache__/
+hooked-ai-backend/*.pyc
+hooked-ai-backend/*.pyo
+hooked-ai-backend/*.pyd
+hooked-ai-backend/.venv/
+hooked-ai-backend/venv/
+hooked-ai-backend/env/
+hooked-ai-backend/*.env
+hooked-ai-backend/.env
+hooked-ai-backend/.modal*
+hooked-ai-backend/brca1_analysis_plot.png
