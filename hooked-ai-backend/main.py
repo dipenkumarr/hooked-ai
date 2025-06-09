@@ -1,12 +1,18 @@
+from email.mime import audio
+import json
 import os
 import pathlib
 import re
+import subprocess
+import time
 import uuid
 import boto3
 import modal
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
+from torch import device
+import whisperx
 
 
 class ProcessVideoRequest(BaseModel):
@@ -46,7 +52,38 @@ class HookedAI:
     @modal.enter()
     def load_model(self):
         print("Loading models")
-        pass
+        self.whisperx_model = whisperx.load_model(
+            "large-v2", device="cuda", compute_type="float16"
+        )
+        self.alignment_model, self.metadata = whisperx.load_align_model(
+            language_code="en", device="cuda"
+        )
+        print("Transcription Models loaded successfully")
+
+    def transcribe_video(self, base_dir: str, video_path: str):
+        audio_path = base_dir + "/" + "audio.wav"
+        extract_command = (
+            f"ffmpeg -i {video_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
+        )
+        subprocess.run(extract_command, shell=True, check=True, capture_output=True)
+
+        print("Starting transcription with WhisperX")
+        start_time = time.time()
+        audio = whisperx.load_audio(str(audio_path))
+        result = self.whisperx_model.transcribe(audio, batch_size=16)
+        result = whisperx.align(
+            result["segments"],
+            self.alignment_model,
+            self.metadata,
+            audio,
+            device="cuda",
+            return_char_alignments=False,
+        )
+
+        duration = time.time() - start_time
+        print(f"Transcription and Alignment took {duration:.2f} seconds")
+
+        print(json.dumps(result, indent=2))
 
     @modal.fastapi_endpoint(method="POST")
     def process_video(
@@ -72,6 +109,8 @@ class HookedAI:
         s3_client.download_file("hooked-ai", s3_key, str(video_path))
 
         print(os.listdir(base_dir))
+
+        self.transcribe_video(str(base_dir), str(video_path))
 
 
 @app.local_entrypoint()
