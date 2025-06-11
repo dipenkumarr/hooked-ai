@@ -1,18 +1,23 @@
+from ast import mod
 from email.mime import audio
 import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import time
 import uuid
+from anyio import Path
 import boto3
 import modal
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Path
+from numpy import clip, isin
 from pydantic import BaseModel
-from torch import device
+from torch import device, mode
 import whisperx
+from google import genai
 
 
 class ProcessVideoRequest(BaseModel):
@@ -40,6 +45,18 @@ mount_path = "/root/.cache/torch"
 auth_scheme = HTTPBearer()
 
 
+def process_clip(
+    base_dir: str,
+    original_video_path: str,
+    s3_key: str,
+    start_time: float,
+    end_time: float,
+    clip_index: int,
+    transcripts_segments: list,
+):
+    pass
+
+
 @app.cls(
     gpu="L40S",
     timeout=900,
@@ -59,6 +76,10 @@ class HookedAI:
             language_code="en", device="cuda"
         )
         print("Transcription Models loaded successfully")
+
+        print("Initializing Gemini client")
+        self.gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        print("Gemini client initialized successfully")
 
     def transcribe_video(self, base_dir: str, video_path: str):
         audio_path = base_dir + "/" + "audio.wav"
@@ -83,7 +104,48 @@ class HookedAI:
         duration = time.time() - start_time
         print(f"Transcription and Alignment took {duration:.2f} seconds")
 
-        print(json.dumps(result, indent=2))
+        segments = []
+
+        if "word_segements" in result:
+            for word_segment in result["word_segments"]:
+                segments.append(
+                    {
+                        "start": word_segment["start"],
+                        "end": word_segment["end"],
+                        "text": word_segment["word"],
+                    }
+                )
+
+        return json.dumps(segments)
+
+    def identify_moments(self, transcript: dict):
+        response = self.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-05-20",
+            contents="""This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
+
+            Your task is to find and extract stories, or question and their corresponding answers from the transcript.
+            Each clip should begin with the question and conclude with the answer.
+            It is acceptable for the clip to include a few additional sentences before a question if it aids in contextualizing the question.
+
+            Please adhere to the following rules:
+            - Ensure that clips do not overlap with one another.
+            - Start and end timestamps of the clips should align perfectly with the sentence boundaries in the transcript.
+            - Only use the start and end timestamps provided in the input. modifying timestamps is not allowed.
+            - Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{"start": seconds, "end": seconds}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
+            - Aim to generate longer clips between 40-60 seconds, and ensure to include as much content from the context as viable.
+
+            Avoid including:
+            - Moments of greeting, thanking, or saying goodbye.
+            - Non-question and answer interactions.
+
+            If there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.
+
+            The transcript is as follows:\n\n"""
+            + str(transcript),
+        )
+        print(f"Identified moments response: {response.text}")
+
+        return response.text
 
     @modal.fastapi_endpoint(method="POST")
     def process_video(
@@ -103,14 +165,54 @@ class HookedAI:
         base_dir = pathlib.Path("/tmp") / run_id
         base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download file
+        # 1. Download file
         video_path = base_dir / "input.mp4"
         s3_client = boto3.client("s3")
         s3_client.download_file("hooked-ai", s3_key, str(video_path))
 
-        print(os.listdir(base_dir))
+        # 2. Transcription
+        transcripts_segments_json = self.transcribe_video(
+            str(base_dir), str(video_path)
+        )
+        transcripts_segments = json.loads(transcripts_segments_json)
 
-        self.transcribe_video(str(base_dir), str(video_path))
+        # 3. Identify the moments for clips
+        print("Identifying moments for clips")
+        identified_moments_raw = self.identify_moments(transcripts_segments)
+        cleaned_json_string = identified_moments_raw.strip()  # type: ignore
+
+        if cleaned_json_string.startswith("```json"):
+            cleaned_json_string = cleaned_json_string[len("```json") :].strip()
+        if cleaned_json_string.endswith("```"):
+            cleaned_json_string = cleaned_json_string[: -len("```")].strip()
+
+        clip_moments = json.loads(cleaned_json_string)
+
+        if not clip_moments or not isinstance(clip_moments, list):
+            print("Invalid response format, expected a list of clips.")
+            clip_moments = []
+
+        print(f"Identified moments: {clip_moments}")
+
+        # 4. Process clips
+        for index, moment in enumerate(clip_moments[:3]):
+            if "start" in moment and "end" in moment:
+                print(f"Processing clip {index}: {moment['start']} to {moment['end']}")
+                process_clip(
+                    base_dir,  # type: ignore
+                    video_path,  # type: ignore
+                    s3_key,
+                    moment["start"],
+                    moment["end"],
+                    index,
+                    transcripts_segments,
+                )
+
+        print("Processing complete. Cleaning up temporary files.")
+
+        if base_dir.exists():
+            print(f"Cleaning up temporary directory: {base_dir}")
+            shutil.rmtree(base_dir, ignore_errors=True)
 
 
 @app.local_entrypoint()
