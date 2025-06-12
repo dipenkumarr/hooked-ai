@@ -178,23 +178,20 @@ def process_clip(
     start_time: float,
     end_time: float,
     clip_index: int,
-    transcripts_segments: list,
+    transcript_segments: list,
 ):
     clip_name = f"clip_{clip_index}"
-    # original_video_path = uuid/original_video_path.mp4
-    # todo: # original_video_path = uuid/clip_name
     s3_key_dir = os.path.dirname(s3_key)
     output_s3_key = f"{s3_key_dir}/{clip_name}.mp4"
-    print(f"Output S3 Key: {output_s3_key}")
+    print(f"Output S3 key: {output_s3_key}")
 
-    clip_dir = Path(base_dir + "/" + clip_name)
+    clip_dir = pathlib.Path(base_dir) / clip_name
     clip_dir.mkdir(parents=True, exist_ok=True)
 
     clip_segment_path = clip_dir / f"{clip_name}_segment.mp4"
     vertical_mp4_path = clip_dir / "pyavi" / "video_out_vertical.mp4"
     subtitle_output_path = clip_dir / "pyavi" / "video_with_subtitles.mp4"
 
-    # Folders for lr-asd
     (clip_dir / "pywork").mkdir(exist_ok=True)
     pyframes_path = clip_dir / "pyframes"
     pyavi_path = clip_dir / "pyavi"
@@ -203,23 +200,17 @@ def process_clip(
     pyframes_path.mkdir(exist_ok=True)
     pyavi_path.mkdir(exist_ok=True)
 
-    # Extract audio
     duration = end_time - start_time
-    print(
-        f"Processing clip from {start_time} to {end_time}, duration: {duration:.2f} seconds"
-    )
     cut_command = (
         f"ffmpeg -i {original_video_path} -ss {start_time} -t {duration} "
         f"{clip_segment_path}"
     )
     subprocess.run(cut_command, shell=True, check=True, capture_output=True, text=True)
-    print(f"Clip segment created at: {clip_segment_path}")
 
-    # Extract audio from the clip segment
-    extract_audio_command = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
-    subprocess.run(extract_audio_command, shell=True, check=True, capture_output=True)
+    extract_cmd = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
+    subprocess.run(extract_cmd, shell=True, check=True, capture_output=True)
 
-    shutil.copy(clip_segment_path, base_dir + "/" + f"{clip_name}.mp4")
+    shutil.copy(clip_segment_path, os.path.join(base_dir, f"{clip_name}.mp4"))
 
     columbia_command = (
         f"python Columbia_test.py --videoName {clip_name} "
@@ -251,8 +242,12 @@ def process_clip(
     )
     cvv_end_time = time.time()
     print(
-        f"Clip {clip_index}: Vertical Video created in {cvv_end_time - cvv_start_time:.2f} seconds"
+        f"Clip {clip_index} vertical video creation time: {cvv_end_time - cvv_start_time:.2f} seconds"
     )
+
+    print(f"Uploading vertical video to S3: {output_s3_key}")
+    s3_client = boto3.client("s3")
+    s3_client.upload_file(vertical_mp4_path, "hooked-ai", output_s3_key)
 
 
 @app.cls(
@@ -304,7 +299,7 @@ class HookedAI:
 
         segments = []
 
-        if "word_segements" in result:
+        if "word_segments" in result:
             for word_segment in result["word_segments"]:
                 segments.append(
                     {
@@ -317,6 +312,8 @@ class HookedAI:
         return json.dumps(segments)
 
     def identify_moments(self, transcript: dict):
+        print("Transcript segments for Gemini:", transcript)
+
         response = self.gemini_client.models.generate_content(
             model="gemini-2.5-flash-preview-05-20",
             contents="""This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
@@ -393,7 +390,7 @@ class HookedAI:
         print(f"Identified moments: {clip_moments}")
 
         # 4. Process clips
-        for index, moment in enumerate(clip_moments[:3]):
+        for index, moment in enumerate(clip_moments[:1]):
             if "start" in moment and "end" in moment:
                 print(f"Processing clip {index}: {moment['start']} to {moment['end']}")
                 process_clip(
