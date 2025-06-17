@@ -490,7 +490,7 @@ class HookedAI:
         print(f"Identified moments: {clip_moments}")
 
         # 4. Process clips
-        for index, moment in enumerate(clip_moments[:1]):
+        for index, moment in enumerate(clip_moments[:3]):
             if "start" in moment and "end" in moment:
                 print(f"Processing clip {index}: {moment['start']} to {moment['end']}")
                 process_clip(
@@ -518,8 +518,10 @@ def main():
     url = hooked_ai.process_video.web_url
     if url is None:
         raise ValueError("The process_video.web_url is None. Cannot make POST request.")
-    payload = {"s3_key": "test1/mi65min.mp4"}
+
+    payload = {"s3_key": "test-2/mi630min.mp4"}
     headers = {"Content-Type": "application/json", "Authorization": "Bearer 123123"}
+
     response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
     result = response.json()
