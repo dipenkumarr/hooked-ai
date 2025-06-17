@@ -39,3 +39,12 @@ hooked-ai-backend/*.env
 hooked-ai-backend/.env
 hooked-ai-backend/.modal*
 hooked-ai-backend/brca1_analysis_plot.png
+
+
+# Frontend (evo2-frontend - Next.js)
+hooked-ai-frontend/node_modules/
+hooked-ai-frontend/.next/
+hooked-ai-frontend/out/
+hooked-ai-frontend/.env*.local
+hooked-ai-frontend/*.tsbuildinfo
+hooked-ai-frontend/next-env.d.ts
