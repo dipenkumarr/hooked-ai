@@ -1,6 +1,7 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { comparePasswords } from "~/lib/auth";
 
 import { db } from "~/server/db";
 
@@ -11,18 +12,18 @@ import { db } from "~/server/db";
  * @see https://next-auth.js.org/getting-started/typescript#module-augmentation
  */
 declare module "next-auth" {
-  interface Session extends DefaultSession {
-    user: {
-      id: string;
-      // ...other properties
-      // role: UserRole;
-    } & DefaultSession["user"];
-  }
+    interface Session extends DefaultSession {
+        user: {
+            id: string;
+            // ...other properties
+            // role: UserRole;
+        } & DefaultSession["user"];
+    }
 
-  // interface User {
-  //   // ...other properties
-  //   // role: UserRole;
-  // }
+    // interface User {
+    //   // ...other properties
+    //   // role: UserRole;
+    // }
 }
 
 /**
@@ -31,25 +32,57 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 export const authConfig = {
-  providers: [
-    /**
-     * ...add more providers here.
-     *
-     * Most other providers require a bit more work than the Discord provider. For example, the
-     * GitHub provider requires you to add the `refresh_token_expires_in` field to the Account
-     * model. Refer to the NextAuth.js docs for the provider you want to use. Example:
-     *
-     * @see https://next-auth.js.org/providers/github
-     */
-  ],
-  adapter: PrismaAdapter(db),
-  callbacks: {
-    session: ({ session, user }) => ({
-      ...session,
-      user: {
-        ...session.user,
-        id: user.id,
-      },
-    }),
-  },
+    providers: [
+        CredentialsProvider({
+            name: "credentials",
+            credentials: {
+                email: { label: "Email", type: "email", placeholder: "you@example.com" },
+                password: { label: "Password", type: "password" },
+            },
+            async authorize(credentials) {
+                if (!credentials?.email || !credentials?.password) {
+                    return null;
+                }
+
+                const email = credentials.email as string;
+                const password = credentials.password as string;
+
+                const user = await db.user.findUnique({
+                    where: { email },
+                });
+
+                if (!user) {
+                    return null;
+                }
+
+                const passwordMatch = await comparePasswords(password, user.password!);
+
+                if (!passwordMatch) {
+                    return null;
+                }
+
+                // Return user object to be added to the session
+                return user;
+            }
+        })
+    ],
+    session: {
+        strategy: "jwt",
+    },
+    adapter: PrismaAdapter(db),
+    callbacks: {
+        session: ({ session, token }) => ({
+            ...session,
+            user: {
+                ...session.user,
+                id: token.sub,
+            },
+        }),
+        jwt: ({ token, user }) => {
+            if (user) {
+                token.sub = user.id; // Store user ID in the JWT token
+            }
+            return token;
+        },
+    },
 } satisfies NextAuthConfig;
