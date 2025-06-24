@@ -16,14 +16,12 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useState } from "react"
 import Link from "next/link"
+import { signUpSchema, type SignUpFormValues } from "~/schemas/auth"
+import { signUp } from "~/actions/auth"
+import { signIn } from "next-auth/react"
+import { redirect, useRouter } from "next/navigation"
 
 
-const signUpSchema = z.object({
-    email: z.string().email("Please enter a valid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters long"),
-})
-
-type SignUpFormValues = z.infer<typeof signUpSchema>
 
 
 export function SignUpForm({
@@ -33,14 +31,41 @@ export function SignUpForm({
 
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const router = useRouter()
 
     const { register, handleSubmit, formState: { errors } } = useForm<SignUpFormValues>({
         resolver: zodResolver(signUpSchema),
     })
 
-    const onSubmit = (data: SignUpFormValues) => {
-        console.log("Form submitted:", data)
-        // Handle form submission logic here
+    const onSubmit = async (data: SignUpFormValues) => {
+        try {
+            setIsSubmitting(true)
+            setError(null)
+
+            const result = await signUp(data);
+            if (!result.success) {
+                setError(result.error || "An error occurred. Please try again later.")
+                return
+            }
+
+            const signInResult = await signIn("credentials", {
+                email: data.email,
+                password: data.password,
+                redirect: false,
+            })
+
+            if (signInResult?.error) {
+                setError("Account created, but failed to sign in. Please try logging in manually.")
+                return
+            } else {
+                router.push("/dashboard")
+            }
+
+        } catch (error) {
+            setError("An error occurred while signing up. Please try again later.")
+        } finally {
+            setIsSubmitting(false)
+        }
     }
 
     return (
