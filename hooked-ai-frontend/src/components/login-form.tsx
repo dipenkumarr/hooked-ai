@@ -16,15 +16,14 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useState } from "react"
 import Link from "next/link"
-import { signUpSchema, type SignUpFormValues } from "~/schemas/auth"
-import { signUp } from "~/actions/auth"
+import { loginSchema, type LoginFormValues } from "~/schemas/auth"
 import { signIn } from "next-auth/react"
-import { redirect, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 
 
 
 
-export function SignUpForm({
+export function LoginForm({
     className,
     ...props
 }: React.ComponentProps<"div">) {
@@ -33,29 +32,23 @@ export function SignUpForm({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const router = useRouter()
 
-    const { register, handleSubmit, formState: { errors } } = useForm<SignUpFormValues>({
-        resolver: zodResolver(signUpSchema),
+    const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
+        resolver: zodResolver(loginSchema),
     })
 
-    const onSubmit = async (data: SignUpFormValues) => {
+    const onSubmit = async (data: LoginFormValues) => {
         try {
             setIsSubmitting(true)
             setError(null)
 
-            const result = await signUp(data);
-            if (!result.success) {
-                setError(result.error || "An error occurred. Please try again later.")
-                return
-            }
-
-            const signUpResult = await signIn("credentials", {
+            const signInResult = await signIn("credentials", {
                 email: data.email,
                 password: data.password,
                 redirect: false,
             })
 
-            if (signUpResult?.error) {
-                setError("Account created, but failed to sign in. Please try logging in manually.")
+            if (signInResult?.error) {
+                setError("Invalid email or password. Please try again.")
                 return
             } else {
                 router.push("/dashboard")
@@ -72,9 +65,9 @@ export function SignUpForm({
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
                 <CardHeader>
-                    <CardTitle>Sign up to your account</CardTitle>
+                    <CardTitle>Login to your account</CardTitle>
                     <CardDescription>
-                        Enter your email below to Sign up to your account
+                        Enter your email below to login to your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -123,7 +116,7 @@ export function SignUpForm({
 
                             <div className="flex flex-col gap-3">
                                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                                    {isSubmitting ? "Signing up..." : "Sign up"}
+                                    {isSubmitting ? "Logging in..." : "Login"}
                                 </Button>
                                 {/* <Button variant="outline" className="w-full">
                                     Sign up with Google
@@ -131,9 +124,9 @@ export function SignUpForm({
                             </div>
                         </div>
                         <div className="mt-4 text-center text-sm">
-                            Already have an account?{" "}
-                            <Link href="/login" className="underline underline-offset-4">
-                                Login
+                            Don't have an account?{" "}
+                            <Link href="/signup" className="underline underline-offset-4">
+                                Sign Up
                             </Link>
                         </div>
                     </form>
