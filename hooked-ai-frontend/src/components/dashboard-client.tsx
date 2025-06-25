@@ -7,7 +7,11 @@ import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import Dropzone, { type DropzoneState } from 'shadcn-dropzone';
-import { UploadCloud } from 'lucide-react';
+import { Loader2, UploadCloud } from 'lucide-react';
+import { generateUploadUrl } from '~/actions/s3';
+import { db } from '~/server/db';
+import { toast } from 'sonner';
+import { processVideo } from '~/actions/generation';
 
 export default function DashboardClient({ uploadedFiles, clips }: {
     uploadedFiles: {
@@ -23,7 +27,59 @@ export default function DashboardClient({ uploadedFiles, clips }: {
     const [files, setFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
 
-    const handleDrop = (acceptedFiles: File[]) => { }
+    const handleDrop = (acceptedFiles: File[]) => {
+        setFiles(acceptedFiles);
+    }
+
+    const handleUpload = async () => {
+        if (files.length === 0) return;
+
+        const file = files[0]!;
+
+        setUploading(true);
+        try {
+            const { success, signedUrl, uploadedFileId } = await generateUploadUrl({
+                fileName: file.name,
+                contentType: file.type
+            })
+
+            if (!success) {
+                throw new Error('Failed to generate upload URL');
+            }
+
+            const uploadResponse = await fetch(signedUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': file.type,
+                },
+                body: file,
+            })
+
+            if (!uploadResponse.ok) {
+                throw new Error('Failed to upload file');
+            }
+
+            await processVideo(uploadedFileId);
+
+            setFiles([]);
+
+            toast.success('File uploaded successfully!', {
+                description: 'Your file has been scheduled for processing.',
+                duration: 5000,
+            });
+
+            console.log('Files uploaded:', files);
+            setFiles([]);
+        } catch (error) {
+            toast.error('Upload failed', {
+                description: 'An unexpected error occurred while uploading video.',
+                duration: 5000,
+            });
+            console.error('Upload failed:', error);
+        } finally {
+            setUploading(false);
+        }
+    }
 
     return (
         <div className='mx-auto flex max-w-5xl flex-col space-y-6 px-4 py-8'>
@@ -59,6 +115,7 @@ export default function DashboardClient({ uploadedFiles, clips }: {
                                 accept={{ 'video/mp4': ['.mp4'] }}
                                 maxSize={500 * 1024 * 1024}
                                 disabled={uploading}
+                                maxFiles={1}
                             >
                                 {(dropzone: DropzoneState) => (
                                     <>
@@ -71,14 +128,22 @@ export default function DashboardClient({ uploadedFiles, clips }: {
                                     </>
                                 )}
                             </Dropzone>
-                            <div className="flex items-start justify-between">
+                            <div className="flex items-start justify-between mt-4">
                                 <div>
                                     {files.length > 0 && (
                                         <div className="text-sm space-y-2 text-muted-foreground">
                                             <p className='font-medium'>Selected file:</p>
+                                            {files.map((file) => (
+                                                <p key={file.name} className='text-muted-foreground'>{file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)</p>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
+                                <Button disabled={files.length === 0 || uploading}
+                                    onClick={handleUpload}
+                                >
+                                    {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : "Upload to generate clips"}
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>

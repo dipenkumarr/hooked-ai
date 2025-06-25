@@ -74,7 +74,7 @@ export const processVideo = inngest.createFunction(
 
                 const clipKeys = allKeys.filter((key): key is string => key !== undefined && key.endsWith("original.mp4"));
 
-                if (clipKeys.length === 0) {
+                if (clipKeys.length > 0) {
                     await db.clip.createMany({
                         data: clipKeys.map((clipKey) => ({
                             s3Key: clipKey,
