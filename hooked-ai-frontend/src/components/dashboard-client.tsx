@@ -92,18 +92,18 @@ export default function DashboardClient({ uploadedFiles, clips }: {
                 </div>
                 <Link href="/dashboard/billing">
                     <Button>
-                        But Credits
+                        Buy Credits
                     </Button>
                 </Link>
             </div>
 
             <Tabs defaultValue="upload">
-                <TabsList>
+                <TabsList className="grid w-full grid-cols-2 h-10">
                     <TabsTrigger value="upload">Upload</TabsTrigger>
                     <TabsTrigger value="my-clips">My Clips</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="upload">
+                <TabsContent value="upload" className="mt-2">
                     <Card>
                         <CardHeader>
                             <CardTitle>Upload Content</CardTitle>
