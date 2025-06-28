@@ -69,28 +69,31 @@ export const processVideo = inngest.createFunction(
                     });
                 });
 
-                const { clipsFound } = await step.run("create-clips-in-db", async () => {
-                    const folderPrefix = s3Key.split("/")[0]!;
-                    const allKeys = await listS3Object(folderPrefix);
+                const { clipsFound } = await step.run(
+                    "create-clips-in-db",
+                    async () => {
+                        const folderPrefix = s3Key.split("/")[0]!;
 
-                    const clipKeys = allKeys.filter((key): key is string => key !== undefined && key.endsWith("original.mp4"));
+                        const allKeys = await listS3Object(folderPrefix);
 
-                    if (clipKeys.length > 0) {
-                        await db.clip.createMany({
-                            data: clipKeys.map((clipKey) => ({
-                                s3Key: clipKey,
-                                uploadedFileId,
-                                userId
-                            }))
-                        })
-                    }
+                        const clipKeys = allKeys.filter(
+                            (key): key is string =>
+                                key !== undefined && key.includes("clip_") && key.endsWith(".mp4"),
+                        );
 
-                    return {
-                        clipsFound: clipKeys.length,
-                    }
+                        if (clipKeys.length > 0) {
+                            await db.clip.createMany({
+                                data: clipKeys.map((clipKey) => ({
+                                    s3Key: clipKey,
+                                    uploadedFileId,
+                                    userId,
+                                })),
+                            });
+                        }
 
-
-                });
+                        return { clipsFound: clipKeys.length };
+                    },
+                );
 
                 await step.run("deduct-credits", async () => {
                     await db.user.update({

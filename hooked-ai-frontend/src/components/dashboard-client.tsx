@@ -7,7 +7,7 @@ import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import Dropzone, { type DropzoneState } from 'shadcn-dropzone';
-import { Loader2, UploadCloud } from 'lucide-react';
+import { Car, Loader2, UploadCloud } from 'lucide-react';
 import { generateUploadUrl } from '~/actions/s3';
 import { db } from '~/server/db';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { processVideo } from '~/actions/generation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { useRouter } from 'next/navigation';
+import { ClipDisplay } from './clip-display';
 
 const formatDate = (date: Date): string => {
     return date.toISOString().split('T')[0]!;
@@ -210,7 +211,17 @@ export default function DashboardClient({ uploadedFiles, clips }: {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="my-clips"></TabsContent>
+                <TabsContent value="my-clips">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>My Clips</CardTitle>
+                            <CardDescription>View and manage your generated clips here. Clips will appear after the video has processed.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ClipDisplay clips={clips} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
         </div>
     )
