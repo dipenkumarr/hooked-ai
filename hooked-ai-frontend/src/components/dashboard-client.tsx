@@ -12,6 +12,13 @@ import { generateUploadUrl } from '~/actions/s3';
 import { db } from '~/server/db';
 import { toast } from 'sonner';
 import { processVideo } from '~/actions/generation';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Badge } from './ui/badge';
+import { useRouter } from 'next/navigation';
+
+const formatDate = (date: Date): string => {
+    return date.toISOString().split('T')[0]!;
+};
 
 export default function DashboardClient({ uploadedFiles, clips }: {
     uploadedFiles: {
@@ -26,6 +33,14 @@ export default function DashboardClient({ uploadedFiles, clips }: {
 
     const [files, setFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const router = useRouter()
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        router.refresh();
+        setTimeout(() => setRefreshing(false), 600);
+    }
 
     const handleDrop = (acceptedFiles: File[]) => {
         setFiles(acceptedFiles);
@@ -85,7 +100,7 @@ export default function DashboardClient({ uploadedFiles, clips }: {
         <div className='mx-auto flex max-w-5xl flex-col space-y-6 px-4 py-8'>
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className='text-2xl font-semibold tracking-tight'>hooked ai</h1>
+                    <h1 className='text-2xl font-semibold tracking-tight'>hooked/ai</h1>
                     <p className='text-muted-foreground text-sm'>
                         Upload your content and get AI-generate clips.
                     </p>
@@ -145,6 +160,52 @@ export default function DashboardClient({ uploadedFiles, clips }: {
                                     {uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : "Upload to generate clips"}
                                 </Button>
                             </div>
+
+                            {uploadedFiles.length > 0 && (
+                                <div className="pt-6">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="text-md mb-2 font-medium">Queue Status</h3>
+                                        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                                            {refreshing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Refresh
+                                        </Button>
+
+                                    </div>
+                                    <div className="max-h-[300px] overflow-auto rounded-md border p-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>File</TableHead>
+                                                    <TableHead>Uploaded</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead>Clips Created</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {uploadedFiles.map((item) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="max-w-xs truncate font-medium">
+                                                            {item.displayName}
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-sm">
+                                                            {formatDate(new Date(item.createdAt))}
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-sm">
+                                                            {item.status === "queued" && (<Badge variant="outline" className="bg-yellow-300/30">Queued</Badge>)}
+                                                            {item.status === "processing" && (<Badge variant="outline" className="bg-orange-300/30">Processing</Badge>)}
+                                                            {item.status === "processed" && (<Badge variant="outline" className="bg-green-300/30">Processed</Badge>)}
+                                                            {item.status === "no credits" && (<Badge variant="outline" className="bg-red-300/30">No Credits</Badge>)}
+                                                            {item.status === "failed" && (<Badge variant="outline" className="bg-red-300/30">Failed</Badge>)}
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-sm">
+                                                            {item.clipsCount > 0 ? (<span>{item.clipsCount} clip{item.clipsCount !== 1 ? "s" : ""}</span>) : (<span>No clips yet</span>)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
